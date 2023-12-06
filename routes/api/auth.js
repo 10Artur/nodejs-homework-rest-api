@@ -20,5 +20,6 @@ router.post(
 );
 router.post("/logout", auth, AuthControll.logout);
 router.get("/current", auth, AuthControll.current);
+router.post("/verify:token", AuthControll.verify);
 
 module.exports = router;
