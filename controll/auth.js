@@ -2,6 +2,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { User } = require("../models/user");
 const { JWT_SECRET } = process.env;
+const sendEmail = require("../error/sendEmail");
+const crypto = require("node:crypto");
 
 const register = async(req, res) => {
     const { email, password } = req.body;
@@ -11,11 +13,44 @@ const register = async(req, res) => {
     }
     const hashPassword = await bcrypt.hash(password, 10);
 
-    const newUser = await User.create({...req.body, password: hashPassword });
+    const verifyToken = crypto.randomUUID();
+
+    await sendEmail({
+        to: email,
+        subject: "Welcome to Phonebook",
+        html: `To confirm your registration please click on the link: <a href="http://localhost:3000/api/auth/verify/${verifyToken}">Click me</a>`,
+        text: `To confirm your registration please open this link: http://localhost:3000/api/auth/verify/${verifyToken}`,
+    });
+
+    const newUser = await User.create({
+        ...req.body,
+        verifyToken,
+        password: hashPassword,
+    });
 
     res.status(201).json({
         user: { email: newUser.email, subscription: newUser.subscription },
     });
+};
+
+const verify = async(req, res, next) => {
+    const { token } = req.params;
+
+    try {
+        const user = await User.findOne({ verifyToken: token }).exec();
+
+        if (user === null) {
+            return res.status(404).send({ message: "User not found" });
+        }
+
+        await User.findByIdAndUpdate(user._id, {
+            verifyToken: null,
+            verify: true,
+        });
+        res.status(200).send({ message: "Verification successful" });
+    } catch (error) {
+        next(error);
+    }
 };
 
 const login = async(req, res, next) => {
@@ -58,4 +93,4 @@ const current = async(req, res, next) => {
     const { email, subcription } = req.user;
     res.json({ email, subcription });
 };
-module.exports = { register, login, logout, current };
+module.exports = { register, verify, login, logout, current };
